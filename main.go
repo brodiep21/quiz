@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 type problem struct {
@@ -15,6 +16,8 @@ type problem struct {
 
 func main() {
 	csvFilename := flag.String("csv", "problems.csv", "a csv file in the format of 'question, answer'")
+
+	timeLimit := flag.Int("limit", 30, "the time limit for the quiz in seconds")
 	flag.Parse()
 
 	file, err := os.Open(*csvFilename)
@@ -26,19 +29,34 @@ func main() {
 	if err != nil {
 		exit("Failed to parse the CSV file.")
 	}
+
 	problems := parseLines(lines)
+
+	timer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
+
 	correct := 0
 	incorrect := 0
+
 	for i, p := range problems {
 		fmt.Printf("Problem #%d: %s = \n", i+1, p.q)
-		var answer string
-		fmt.Scanf("%s\n", &answer)
-		if answer == p.a {
-			fmt.Println("Correct!")
-			correct++
-		} else {
-			fmt.Println("Incorrect :(")
-			incorrect++
+		answerCh := make(chan string)
+		go func() {
+			var answer string
+			fmt.Scanf("%s\n", &answer)
+			answerCh <- answer
+		}()
+		select {
+		case <-timer.C:
+			fmt.Printf("\nYou scored %d out of %d! Missing %d questions\n", correct, len(problems), incorrect)
+			return
+		case answer := <-answerCh:
+			if answer == p.a {
+				fmt.Println("Correct!")
+				correct++
+			} else {
+				fmt.Println("Incorrect :(")
+				incorrect++
+			}
 		}
 	}
 	fmt.Printf("You scored %d out of %d! Missing %d questions\n", correct, len(problems), incorrect)
